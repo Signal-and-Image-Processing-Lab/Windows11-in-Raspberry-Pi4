@@ -1,0 +1,69 @@
+ 1. Before starting WoR, turn off real-time scanning / real-time protection:
+      - Windows Security → Virus & threat protection → Manage settings
+      - Turn off Real-time protection
+      - If another antivirus is installed, temporarily disable its real-time scanning too.
+  2. Run WoR / corrected WoR setup as Administrator.
+  3. Select:
+      - Target device: correct Raspberry Pi model, for example Pi 4 / Pi 400 ARM64
+      - Windows image: Windows ARM64 image
+      - Edition: desired Windows edition
+      - Target drive: the USB/SSD you want to erase and use
+      - Driver package: matching Raspberry Pi Windows ARM64 drivers
+      - UEFI package: matching Raspberry Pi UEFI firmware
+      - Partition scheme: GPT
+      - Image deployer: WIMGAPI, if available
+  4. Confirm the target drive carefully.
+      - WoR will erase the selected drive.
+      - Make sure it is not the internal Windows disk.
+  5. Let WoR complete these stages:
+      - Create BOOT FAT32 partition
+      - Create Windows NTFS partition
+      - Apply Windows ARM64 image
+      - Inject Raspberry Pi drivers
+      - Copy Raspberry Pi boot package / UEFI files
+      - Create EFI boot files and BCD boot configuration
+  6. Do not remove the USB/SSD until WoR finishes.
+  7. After WoR is done, safely eject the drive and try booting it on the Raspberry Pi.
+
+  If WoR Fails Near The End Or Boot Fails
+
+  The fix that worked was to repair only the boot/BCD part instead of repeating the whole Windows image installation.
+
+  1. Reconnect the WoR USB/SSD to the Windows PC.
+  2. Keep real-time protection disabled temporarily, because the failure was related to boot/helper files being blocked
+     as virus or potentially unwanted software.
+  3. Open PowerShell or Terminal as Administrator.
+  4. Find the two WoR partitions:
+      - BOOT partition: FAT32
+      - Windows partition: NTFS
+  5. Rebuild the EFI boot files using Microsoft bcdboot:
+
+  bcdboot.exe <WindowsLetter>:\Windows /s <BootLetter>: /f UEFI /offline /c
+
+  Example format only:
+
+  bcdboot.exe W:\Windows /s S: /f UEFI /offline /c
+
+  6. Fix the BCD entries so they point to the Windows partition:
+
+  bcdedit.exe /store <BootLetter>:\EFI\Microsoft\Boot\BCD /set {default} device partition=<WindowsLetter>:
+  bcdedit.exe /store <BootLetter>:\EFI\Microsoft\Boot\BCD /set {default} osdevice partition=<WindowsLetter>:
+  bcdedit.exe /store <BootLetter>:\EFI\Microsoft\Boot\BCD /set {default} path \Windows\System32\winload.efi
+  bcdedit.exe /store <BootLetter>:\EFI\Microsoft\Boot\BCD /set {default} systemroot \Windows
+  bcdedit.exe /store <BootLetter>:\EFI\Microsoft\Boot\BCD /set {default} detecthal Yes
+  bcdedit.exe /store <BootLetter>:\EFI\Microsoft\Boot\BCD /set {default} testsigning on
+  bcdedit.exe /store <BootLetter>:\EFI\Microsoft\Boot\BCD /set {default} nointegritychecks on
+  bcdedit.exe /store <BootLetter>:\EFI\Microsoft\Boot\BCD /set {default} recoveryenabled No
+  bcdedit.exe /store <BootLetter>:\EFI\Microsoft\Boot\BCD /set {default} bootstatuspolicy IgnoreAllFailures
+
+  7. Make sure this file exists:
+
+  <BootLetter>:\EFI\BOOT\BOOTAA64.EFI
+
+  If missing, copy:
+
+  Copy-Item <BootLetter>:\EFI\Microsoft\Boot\bootmgfw.efi <BootLetter>:\EFI\BOOT\BOOTAA64.EFI -Force
+
+  8. Safely eject the drive and boot again.
+  9. If it boots but shows a blank screen, edit config.txt on the BOOT partition and add conservative HDMI settings only
+     for display troubleshooting.
